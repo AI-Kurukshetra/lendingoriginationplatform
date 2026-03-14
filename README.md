@@ -18,11 +18,14 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 SUPABASE_SERVICE_ROLE_KEY=...
 JOB_SECRET=optional
 PARTNER_RATE_LIMIT=optional
+RESEND_API_KEY=optional (email delivery)
+NOTIFICATION_FROM_EMAIL=optional (email sender)
+SIGNATURE_WEBHOOK_SECRET=optional
 ```
 
 ## Database
 
-Run the migrations in `supabase/migrations/0001_init.sql` and `supabase/migrations/0002_risk_and_comparison.sql` in your Supabase SQL editor.
+Run the migrations in `supabase/migrations/0001_init.sql`, `supabase/migrations/0002_risk_and_comparison.sql`, and `supabase/migrations/0003_feature_upgrades.sql` in your Supabase SQL editor.
 
 Create a Supabase Storage bucket named `documents` with private access.
 

@@ -50,23 +50,32 @@ export function AppShell({
         </aside>
 
         <div className="flex min-h-screen flex-col">
-          <header className="flex items-center justify-between border-b border-border bg-[var(--surface)]/70 px-6 py-4 backdrop-blur">
-            <div>
-              <h2 className="text-lg font-semibold text-foreground">{tenantName ?? "Dashboard"}</h2>
-              <p className="text-xs text-muted">Welcome back {userName ?? "team"}</p>
+          <header className="space-y-3 border-b border-border bg-[var(--surface)]/70 px-6 py-4 backdrop-blur">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">{tenantName ?? "Dashboard"}</h2>
+                <p className="text-xs text-muted">Welcome back {userName ?? "team"}</p>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-muted">
+                <span className="rounded-full border border-border px-3 py-1">Secure by Supabase</span>
+                <Link className="text-accent" href="/portal">
+                  Borrower Portal
+                </Link>
+                <ThemeToggle />
+                <form action={signOut}>
+                  <button className="rounded-full border border-border px-3 py-1 text-xs hover:bg-[var(--surface)]">
+                    Sign out
+                  </button>
+                </form>
+              </div>
             </div>
-            <div className="flex items-center gap-2 text-xs text-muted">
-              <span className="rounded-full border border-border px-3 py-1">Secure by Supabase</span>
-              <Link className="text-accent" href="/portal">
-                Borrower Portal
-              </Link>
-              <ThemeToggle />
-              <form action={signOut}>
-                <button className="rounded-full border border-border px-3 py-1 text-xs hover:bg-[var(--surface)]">
-                  Sign out
-                </button>
-              </form>
-            </div>
+            <nav className="flex gap-2 overflow-x-auto pb-1 text-xs lg:hidden">
+              {navItems.slice(0, 8).map((item) => (
+                <Link key={item.href} href={item.href} className="whitespace-nowrap rounded-full border border-border px-3 py-1">
+                  {item.label}
+                </Link>
+              ))}
+            </nav>
           </header>
           <main className="flex-1 px-6 py-6">{children}</main>
         </div>

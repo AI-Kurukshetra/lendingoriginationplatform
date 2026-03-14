@@ -22,9 +22,21 @@ const adminPassword = "AdminPass123!";
 const borrowerEmail = "borrower@northwind.demo";
 const borrowerPassword = "BorrowerPass123!";
 
+async function findUserByEmail(email) {
+  let page = 1;
+  while (page <= 10) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage: 100 });
+    if (error) throw error;
+    const found = data?.users?.find((item) => item.email?.toLowerCase() === email.toLowerCase());
+    if (found) return found;
+    if (!data?.users?.length) break;
+    page += 1;
+  }
+  return null;
+}
+
 async function ensureUser(email, password, fullName) {
-  const { data: list } = await supabase.auth.admin.listUsers({ email });
-  const existing = list?.users?.[0];
+  const existing = await findUserByEmail(email);
   if (existing) return existing;
 
   const { data, error } = await supabase.auth.admin.createUser({
@@ -102,21 +114,20 @@ async function seedWorkflow(tenantId) {
     .limit(1);
   if (existing?.length) return;
 
-  await supabase.from("workflows")
-    .insert({
-      tenant_id: tenantId,
-      name: "Standard underwriting",
-      definition: {
-        steps: [
-          { name: "KYC", type: "identity" },
-          { name: "Credit", type: "credit" },
-          { name: "Underwriting", type: "manual" },
-          { name: "Compliance", type: "compliance" },
-          { name: "Signature", type: "signature" },
-        ],
-      },
-      active: true,
-    });
+  await supabase.from("workflows").insert({
+    tenant_id: tenantId,
+    name: "Standard underwriting",
+    definition: {
+      steps: [
+        { name: "KYC", type: "identity" },
+        { name: "Credit", type: "credit" },
+        { name: "Underwriting", type: "manual" },
+        { name: "Compliance", type: "compliance" },
+        { name: "Signature", type: "signature" },
+      ],
+    },
+    active: true,
+  });
 }
 
 async function seedJobs(tenantId) {
@@ -131,6 +142,142 @@ async function seedJobs(tenantId) {
     { tenant_id: tenantId, name: "daily-credit-pull", schedule: "0 2 * * *" },
     { tenant_id: tenantId, name: "document-ocr", schedule: "*/30 * * * *" },
   ]);
+}
+
+async function seedDecisionRules(tenantId) {
+  const { data: existing } = await supabase
+    .from("decision_rules")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .limit(1);
+
+  if (existing?.length) return;
+
+  await supabase.from("decision_rules").insert([
+    {
+      tenant_id: tenantId,
+      name: "Prime approval",
+      min_credit_score: 730,
+      min_income_ratio: 1.8,
+      max_amount: 75000,
+      decision: "approved",
+      reason: "Prime score and strong income coverage",
+      priority: 10,
+    },
+    {
+      tenant_id: tenantId,
+      name: "Subprime reject",
+      max_credit_score: 599,
+      decision: "rejected",
+      reason: "Credit score too low",
+      priority: 20,
+    },
+    {
+      tenant_id: tenantId,
+      name: "Default manual review",
+      decision: "manual_review",
+      reason: "Requires underwriter assessment",
+      priority: 99,
+    },
+  ]);
+}
+
+async function seedComplianceRules(tenantId) {
+  const { data: existing } = await supabase
+    .from("compliance_rules")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .limit(1);
+
+  if (existing?.length) return;
+
+  await supabase.from("compliance_rules").insert([
+    {
+      tenant_id: tenantId,
+      code: "TILA_MAX_APR",
+      name: "TILA APR threshold",
+      severity: "critical",
+      definition: { maxApr: 36, onMatchStatus: "pass", onMissStatus: "review" },
+    },
+    {
+      tenant_id: tenantId,
+      code: "HMDA_HIGH_BALANCE",
+      name: "HMDA high balance review",
+      severity: "warning",
+      definition: { maxAmount: 50000, onMatchStatus: "pass", onMissStatus: "review" },
+    },
+    {
+      tenant_id: tenantId,
+      code: "RESPA_STATE_REQUIRED",
+      name: "RESPA state disclosure",
+      severity: "warning",
+      definition: { states: ["CA", "TX", "NY", "FL"], onMatchStatus: "pass", onMissStatus: "review" },
+    },
+  ]);
+}
+
+async function seedIntegrationSettings(tenantId) {
+  const providers = ["credit-bureau", "bank-verification", "employment-verification", "kyc"];
+  for (const provider of providers) {
+    await supabase.from("integration_connections").upsert(
+      {
+        tenant_id: tenantId,
+        provider,
+        status: "connected",
+        config: { useExternal: false },
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "tenant_id,provider" }
+    );
+  }
+
+  await supabase.from("signature_providers").upsert(
+    {
+      tenant_id: tenantId,
+      provider: "mock-signature",
+      status: "connected",
+      config: { mode: "sandbox" },
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "tenant_id,provider" }
+  );
+}
+
+async function seedPricingRules(tenantId) {
+  const { data: products } = await supabase
+    .from("loan_products")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .limit(2);
+
+  for (const product of products ?? []) {
+    const { data: existing } = await supabase
+      .from("pricing_rules")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .eq("loan_product_id", product.id)
+      .limit(1);
+
+    if (existing?.length) continue;
+
+    await supabase.from("pricing_rules").insert([
+      {
+        tenant_id: tenantId,
+        loan_product_id: product.id,
+        rule: { minCreditScore: 740, adjustmentBps: -25 },
+      },
+      {
+        tenant_id: tenantId,
+        loan_product_id: product.id,
+        rule: { minAmount: 40000, adjustmentBps: 35 },
+      },
+      {
+        tenant_id: tenantId,
+        loan_product_id: product.id,
+        rule: { riskBand: "high", adjustmentBps: 75 },
+      },
+    ]);
+  }
 }
 
 async function seedInvite(tenantId) {
@@ -277,6 +424,10 @@ async function main() {
   await seedProducts(tenant.id);
   await seedWorkflow(tenant.id);
   await seedJobs(tenant.id);
+  await seedDecisionRules(tenant.id);
+  await seedComplianceRules(tenant.id);
+  await seedIntegrationSettings(tenant.id);
+  await seedPricingRules(tenant.id);
   const invite = await seedInvite(tenant.id);
   await seedBorrowerApp(tenant.id, borrowerUser.id);
 }

@@ -1,7 +1,9 @@
-﻿import { createSupabaseServer } from "@/lib/supabase/server";
+import { createSupabaseServer } from "@/lib/supabase/server";
 import { requireTenantMember } from "@/lib/auth";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { sendTestNotification } from "@/app/actions/notifications";
 
 export default async function NotificationsPage() {
   const { member } = await requireTenantMember();
@@ -14,12 +16,23 @@ export default async function NotificationsPage() {
     .order("created_at", { ascending: false })
     .limit(20);
 
+  async function handleSendTest() {
+    "use server";
+    await sendTestNotification();
+  }
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Communication Hub</h1>
         <p className="text-sm text-muted">Track borrower updates across channels.</p>
       </div>
+
+      <Card>
+        <form action={handleSendTest}>
+          <Button type="submit" variant="secondary">Send test notification</Button>
+        </form>
+      </Card>
 
       <Card>
         {notifications?.length ? (
@@ -29,6 +42,7 @@ export default async function NotificationsPage() {
                 <div>
                   <p className="font-semibold">{String(note.payload?.subject ?? "Notification")}</p>
                   <p className="text-xs text-muted">{note.channel}</p>
+                  <p className="text-xs text-muted">{String(note.payload?.deliveryReason ?? "n/a")}</p>
                 </div>
                 <Badge tone={note.status === "sent" ? "success" : "warning"}>{note.status}</Badge>
               </div>

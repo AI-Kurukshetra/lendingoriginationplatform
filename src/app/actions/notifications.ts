@@ -13,6 +13,7 @@ export async function sendTestNotification() {
     userId: user.id,
     channel: "email",
     payload: {
+      to: user.email ?? "",
       subject: "Test notification",
       message: "This is a test notification from Communications hub.",
     },

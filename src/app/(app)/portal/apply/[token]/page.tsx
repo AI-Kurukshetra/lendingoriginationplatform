@@ -73,6 +73,14 @@ export default async function ApplyWithInvitePage({ params }: PageProps) {
             <Input name="requestedTerm" type="number" min="1" required />
           </div>
           <div className="space-y-2">
+            <label className="text-xs font-semibold text-muted">Channel</label>
+            <Select name="channel" defaultValue="web">
+              <option value="web">Web</option>
+              <option value="mobile">Mobile</option>
+              <option value="pos">Point of sale</option>
+            </Select>
+          </div>
+          <div className="space-y-2">
             <label className="text-xs font-semibold text-muted">Loan product</label>
             <Select name="loanProductId" required>
               <option value="">Select</option>

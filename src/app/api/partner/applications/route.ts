@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
 import { hashApiKey } from "@/lib/crypto";
 import { getApiUsageCount } from "@/services/rate-limit";
+import { originateApplication } from "@/services/origination";
 
 const DEFAULT_LIMIT = 60;
 
@@ -20,13 +21,18 @@ async function authorize(request: NextRequest) {
   return { keyId: key.id, tenantId: key.tenant_id };
 }
 
+async function applyRateLimit(tenantId: string) {
+  const rateLimit = Number(process.env.PARTNER_RATE_LIMIT ?? DEFAULT_LIMIT);
+  const count = await getApiUsageCount({ tenantId, windowSeconds: 60 });
+  return { allowed: count < rateLimit };
+}
+
 export async function GET(request: NextRequest) {
   const auth = await authorize(request);
   if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const rateLimit = Number(process.env.PARTNER_RATE_LIMIT ?? DEFAULT_LIMIT);
-  const count = await getApiUsageCount({ tenantId: auth.tenantId, windowSeconds: 60 });
-  if (count >= rateLimit) {
+  const limit = await applyRateLimit(auth.tenantId);
+  if (!limit.allowed) {
     return NextResponse.json({ error: "Rate limit exceeded" }, { status: 429 });
   }
 
@@ -52,41 +58,41 @@ export async function POST(request: NextRequest) {
   const auth = await authorize(request);
   if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const rateLimit = Number(process.env.PARTNER_RATE_LIMIT ?? DEFAULT_LIMIT);
-  const count = await getApiUsageCount({ tenantId: auth.tenantId, windowSeconds: 60 });
-  if (count >= rateLimit) {
+  const limit = await applyRateLimit(auth.tenantId);
+  if (!limit.allowed) {
     return NextResponse.json({ error: "Rate limit exceeded" }, { status: 429 });
   }
 
   const body = await request.json();
-  const supabase = createSupabaseAdmin();
-
-  const { data: borrower } = await supabase
-    .from("borrowers")
-    .insert({
-      tenant_id: auth.tenantId,
-      first_name: body.firstName,
-      last_name: body.lastName,
-      phone: body.phone,
-      kyc_status: "pending",
-    })
-    .select("id")
-    .single();
-
-  const { data: application } = await supabase
-    .from("loan_applications")
-    .insert({
-      tenant_id: auth.tenantId,
-      borrower_id: borrower?.id,
-      loan_product_id: body.loanProductId,
+  const result = await originateApplication({
+    tenantId: auth.tenantId,
+    borrower: {
+      firstName: String(body.firstName ?? ""),
+      lastName: String(body.lastName ?? ""),
+      phone: String(body.phone ?? ""),
+    },
+    request: {
+      requestedAmount: Number(body.requestedAmount ?? 0),
+      requestedTermMonths: Number(body.requestedTermMonths ?? 0),
+      loanProductId: String(body.loanProductId ?? ""),
       channel: "partner",
-      status: "submitted",
-      requested_amount: body.requestedAmount,
-      requested_term_months: body.requestedTermMonths,
-      data: body.data ?? {},
-    })
-    .select("id")
-    .single();
+      annualIncome: Number(body.annualIncome ?? 0),
+      state: String(body.state ?? ""),
+      idNumber: String(body.idNumber ?? ""),
+      borrowerEmail: String(body.email ?? ""),
+    },
+  });
+
+  const supabase = createSupabaseAdmin();
+  if (result.error || !result.applicationId) {
+    await supabase.from("api_usage").insert({
+      tenant_id: auth.tenantId,
+      api_key_id: auth.keyId,
+      endpoint: "/partner/applications",
+      status: 400,
+    });
+    return NextResponse.json({ error: result.error ?? "Unable to create application" }, { status: 400 });
+  }
 
   await supabase.from("api_usage").insert({
     tenant_id: auth.tenantId,
@@ -95,5 +101,8 @@ export async function POST(request: NextRequest) {
     status: 201,
   });
 
-  return NextResponse.json({ application }, { status: 201 });
+  return NextResponse.json(
+    { application: { id: result.applicationId, status: result.decision } },
+    { status: 201 }
+  );
 }

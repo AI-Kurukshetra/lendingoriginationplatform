@@ -1,19 +1,26 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
-function readAllCookies(cookieStore: any) {
-  if (typeof cookieStore.getAll === "function") {
-    return cookieStore.getAll();
+type CookiePair = { name: string; value: string };
+type CookieLike = { name: string; value: string | { value?: string } | undefined };
+type CookieStoreLike = { getAll?: () => CookieLike[] } | Iterable<[string, string | { value?: string }]>;
+
+function normalizeCookie(name: string, value: string | { value?: string } | undefined): CookiePair {
+  return { name, value: typeof value === "string" ? value : value?.value ?? "" };
+}
+
+function readAllCookies(cookieStore: CookieStoreLike): CookiePair[] {
+  if (typeof cookieStore === "object" && cookieStore !== null && "getAll" in cookieStore && typeof cookieStore.getAll === "function") {
+    return cookieStore.getAll().map((item) => normalizeCookie(item.name, item.value));
   }
-  if (cookieStore && typeof cookieStore[Symbol.iterator] === "function") {
-    return Array.from(cookieStore as Iterable<[string, any]>).map(
-      ([name, value]) => ({
-        name,
-        value: typeof value === "string" ? value : value?.value,
-      })
+
+  try {
+    return Array.from(cookieStore as Iterable<[string, string | { value?: string }]>).map(
+      ([name, value]) => normalizeCookie(name, value)
     );
+  } catch {
+    return [];
   }
-  return [];
 }
 
 export async function createSupabaseServer() {
