@@ -57,7 +57,6 @@ export function AppShell({
                 <p className="text-xs text-muted">Welcome back {userName ?? "team"}</p>
               </div>
               <div className="flex items-center gap-2 text-xs text-muted">
-                <span className="rounded-full border border-border px-3 py-1">Secure by Supabase</span>
                 <Link className="text-accent" href="/portal">
                   Borrower Portal
                 </Link>
